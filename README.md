@@ -1,20 +1,10 @@
-# Trakt list sync
+# Trakt watch-history repair
 
-The hourly list-sync schedule was retired on October 15, 2026 because Trakt list collaborators replace it. Only the daily watch-history job remains scheduled. List-sync code and stored state are retained. The protected disable operation could not be completed because 1Password authorization timed out; the hourly Cloudflare trigger was removed and verified.
+Daily checks and repairs of incorrect watch-history dates for David and Emalie, running entirely on Cloudflare Workers. No local scheduled jobs or running Mac are required.
 
-Hourly bidirectional sync of David and Emalie’s private **DavEmalie** lists, plus daily watch-history date checks and automatic repairs. Both jobs run on Cloudflare Workers and share encrypted OAuth credentials, sync state, and repair journals in the existing Durable Object.
+This is the canonical source repository for the daily job, extracted from [trakt-list-sync](https://github.com/dgitman/trakt-list-sync) with its Git history intact. The hourly list-sync schedule is retired following Trakt collaborator support. Legacy list-sync implementation remains in the source for compatibility; it is not scheduled.
 
-This is the canonical project, consolidating the original `trakt-list-sync` and `trakt-scrobble-check` code. Future fixes and deployments belong here.
-
-## Hourly list sync: scope and conflict policy
-
-The hourly job changes only list membership. It leaves history, ratings, watchlists, other lists, ordering, notes, and privacy untouched. The separate daily job repairs eligible watch-history dates as described below. Both account identities and pinned numeric list IDs are verified. Missing lists, incomplete pagination, unsupported media, and privacy changes fail closed.
-
-Given the last verified common set B and current sets D and E, the target is `(D ∪ E) − ((B − D) ∪ (B − E))`. New additions propagate both ways; removal of previously synced entries wins. Movies, shows, seasons, and episodes use typed Trakt IDs.
-
-Before every batch, both lists are reread. The journal is persisted before sending writes. Interrupted or partially applied batches resume from verified actual membership. Unexplained concurrent changes retain the journal and stop for review. The common baseline advances only after both full lists equal the target.
-
-Trakt does not provide a compare-and-swap list mutation API. An edit in the gap between read and write can be indistinguishable from our operation. Removal and re-addition between hourly observations also cannot always be distinguished.
+The source repository was separated on October 15, 2026. The deployed Worker retains its existing name and Durable Object identity to preserve credentials and repair journals. Deploy future daily-job changes from this repository only.
 
 ## Daily history behavior
 
