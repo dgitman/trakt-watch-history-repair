@@ -1,8 +1,8 @@
 # Trakt watch-history repair
 
-Daily checks and repairs of incorrect watch-history dates for David and Emalie, running entirely on Cloudflare Workers. No local scheduled jobs or running Mac are required.
+Daily checks and repairs of incorrect watch-history dates for David, running entirely on Cloudflare Workers. No local scheduled jobs or running Mac are required.
 
-This is the canonical source repository for the daily job, extracted from [trakt-list-sync](https://github.com/dgitman/trakt-list-sync) with its Git history intact. The hourly list-sync schedule is retired following Trakt collaborator support. Legacy list-sync implementation remains in the source for compatibility; it is not scheduled.
+This is the canonical source repository for the daily job, extracted from [trakt-list-sync](https://github.com/dgitman/trakt-list-sync) with its Git history intact. The hourly list sync and Emalie's account were removed on October 25, 2026; the Worker now handles David's account only.
 
 The source repository was separated on October 15, 2026. The deployed Worker retains its existing name and Durable Object identity to preserve credentials and repair journals. Deploy future daily-job changes from this repository only.
 
@@ -41,7 +41,7 @@ npm run typecheck
 npm run dry-run
 ```
 
-The 31 tests cover detection, pagination integrity, interrupted additions and deletions, repeat-watch preservation, concurrent changes, account isolation, rate-limit recovery, notification behavior, and existing list-sync behavior. Tests do not call live Trakt accounts.
+The tests cover detection, pagination integrity, interrupted additions and deletions, repeat-watch preservation, concurrent changes, identity checks, rate-limit recovery, notification behavior, and secret-free token requests. Tests do not call live Trakt accounts.
 
 ## Deployment and secrets
 
@@ -51,9 +51,9 @@ npm run deploy
 
 Authenticate Wrangler to the configured Cloudflare account first. The checked-in configuration points to the existing production Worker. Review its account, email destination, and schedules before deployment elsewhere.
 
-Required cloud secrets: `ADMIN_KEY`, `ENCRYPTION_KEY`, `TRAKT_CLIENT_ID`, and `TRAKT_CLIENT_SECRET`. The encryption key must be a random 32-byte base64 value. Existing secrets and encrypted OAuth grants must be retained for production updates.
+Required cloud secrets: `ADMIN_KEY`, `ENCRYPTION_KEY`, and `TRAKT_CLIENT_ID`. No Trakt client secret is used: Trakt no longer issues one, and the device flow needs only the client ID. The encryption key must be a random 32-byte base64 value. Existing secrets and encrypted OAuth grants must be retained for production updates.
 
-`scripts/provision-secrets.py` reads `ADMIN_KEY_REF`, `ENCRYPTION_KEY_REF`, `TRAKT_CLIENT_ID_REF`, and `TRAKT_CLIENT_SECRET_REF` from environment variables containing 1Password secret references. It streams values to Wrangler without saving or printing them. Never commit credentials, local operational configuration, OAuth token files, or personal history exports.
+`scripts/provision-secrets.py` reads `ADMIN_KEY_REF`, `ENCRYPTION_KEY_REF`, and `TRAKT_CLIENT_ID_REF` from environment variables containing 1Password secret references. It streams values to Wrangler without saving or printing them. Never commit credentials, local operational configuration, OAuth token files, or personal history exports.
 
 ## Administration
 
@@ -67,12 +67,12 @@ npm run admin -- history/report
 
 `history/check` performs checks and repairs immediately. `history/report` returns the last complete findings, latest run status, and any pending repair journals. Completed repairs are also retained in Durable Object audit records.
 
-Other operations retained for the hourly list sync: `snapshot`, `initialize`, `dry-run`, `enable`, `disable`, `run`, `auth/start`, `auth/poll`, and `notifications/test`. `enable` and `disable` apply to list sync, not the daily history job. To suspend daily repairs, remove only its daily cron trigger.
+Other operations: `auth/start`, `auth/poll`, and `notifications/test`.
 
-For a new deployment, authorize each account separately through `auth/start` and `auth/poll` with `{"side":"david"}` or `{"side":"emalie"}`. The Worker validates the expected identity before accepting a grant. Use independent cloud grants; do not reuse desktop MCP refresh tokens. Do not reauthorize an already working production deployment just to update its code.
+After rotating the Trakt client ID, or if Trakt returns `invalid_grant` ("session not found"), reauthorize with `auth/start` and `auth/poll` using `{"side":"david"}`. The Worker validates the expected identity before accepting a grant. Use an independent cloud grant; do not reuse desktop MCP refresh tokens. Do not reauthorize an already working deployment just to update its code.
 
 ## Recovery
 
 An interrupted repair retains its journal. The next run reconciles actual history before changing it again. If an addition is ambiguous, the job stops and alerts rather than risking a duplicate or deleting the original. Inspect `history/report` before intervention. Missing release metadata is reported, not guessed. Release-date repairs are fallback dates, not recovered viewing dates.
 
-The hourly list sync retains its baseline and pending operations independently. Never delete or reset the Durable Object to recover from an error.
+Never delete or reset the Durable Object to recover from an error; it holds the encrypted grant and repair journals.

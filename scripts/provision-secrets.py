@@ -1,6 +1,6 @@
 """Upload secrets from 1Password references; never persist or print secret values."""
 import json, os, subprocess
-names = ['ADMIN_KEY', 'ENCRYPTION_KEY', 'TRAKT_CLIENT_ID', 'TRAKT_CLIENT_SECRET']
+names = ['ADMIN_KEY', 'ENCRYPTION_KEY', 'TRAKT_CLIENT_ID']
 secrets = {}
 for name in names:
     ref = os.environ.get(name + '_REF', '')

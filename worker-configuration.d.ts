@@ -8,7 +8,6 @@ interface __BaseEnv_Env {
 	ADMIN_KEY: string;
 	ENCRYPTION_KEY: string;
 	TRAKT_CLIENT_ID: string;
-	TRAKT_CLIENT_SECRET: string;
 	SYNC: DurableObjectNamespace<import("./src/index").DavEmalieSync>;
 }
 declare namespace Cloudflare {
@@ -23,7 +22,7 @@ type StringifyValues<EnvType extends Record<string, unknown>> = {
 	[Binding in keyof EnvType]: EnvType[Binding] extends string ? EnvType[Binding] : string;
 };
 declare namespace NodeJS {
-	interface ProcessEnv extends StringifyValues<Pick<Cloudflare.Env, "ALERT_TO" | "ALERT_FROM" | "ADMIN_KEY" | "ENCRYPTION_KEY" | "TRAKT_CLIENT_ID" | "TRAKT_CLIENT_SECRET">> {}
+	interface ProcessEnv extends StringifyValues<Pick<Cloudflare.Env, "ALERT_TO" | "ALERT_FROM" | "ADMIN_KEY" | "ENCRYPTION_KEY" | "TRAKT_CLIENT_ID">> {}
 }
 
 // Begin runtime types

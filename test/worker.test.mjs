@@ -75,55 +75,6 @@ test("Worker rejects unauthorized and malformed requests", async () => {
     400,
   );
 });
-test("disabled scheduler does not read Trakt or send email", async () => {
-  const f = fixture();
-  f.obj.runInner = async () => {
-    throw Error("must not run");
-  };
-  assert.deepEqual(await f.obj.run(), { status: "disabled" });
-  assert.equal(f.emails, 0);
-});
-test("failed scheduled runs record state and deduplicate notifications", async () => {
-  const f = fixture();
-  f.data.set("enabled", true);
-  f.obj.runInner = async () => {
-    throw Error("Trakt unavailable");
-  };
-  await assert.rejects(f.obj.run());
-  await assert.rejects(f.obj.run());
-  assert.equal(f.emails, 1);
-  assert.equal(f.data.get("lastRun").status, "failed");
-});
-test("failed email delivery retries next run", async () => {
-  const f = fixture();
-  f.data.set("enabled", true);
-  f.obj.runInner = async () => {
-    throw Error("failure");
-  };
-  f.env.EMAIL.send = async () => {
-    throw Error("mail down");
-  };
-  await assert.rejects(f.obj.run());
-  assert.equal(f.data.has("lastAlert"), false);
-  f.env.EMAIL.send = async () => ({ messageId: "sent" });
-  await assert.rejects(f.obj.run());
-  assert.equal(f.data.has("lastAlert"), true);
-});
-test("operations are serialized across awaits", async () => {
-  const f = fixture();
-  f.data.set("enabled", true);
-  let active = 0,
-    max = 0;
-  f.obj.runInner = async () => {
-    active++;
-    max = Math.max(max, active);
-    await new Promise((r) => setTimeout(r, 10));
-    active--;
-    return {};
-  };
-  await Promise.all([f.obj.run(), f.obj.run(), f.obj.run()]);
-  assert.equal(max, 1);
-});
 test("OAuth tokens are encrypted and decrypt correctly", async () => {
   const f = fixture();
   const token = { access_token: "test-only-token" };
@@ -131,61 +82,28 @@ test("OAuth tokens are encrypted and decrypt correctly", async () => {
   assert.ok(!JSON.stringify(sealed).includes(token.access_token));
   assert.deepEqual(await f.obj.unseal(sealed), token);
 });
-test("wrong account identity prevents reads", async () => {
+test("wrong account identity is rejected", async () => {
   const f = fixture();
   f.obj.api = async () =>
     Response.json({
       user: { username: "someone_else", ids: { slug: "someone-else" } },
     });
-  await assert.rejects(f.obj.readOne("david"), /identity mismatch/);
-});
-function listAPI(f, { pageHeaders = true, replaced = false } = {}) {
-  f.obj.identity = async () => {};
-  f.data.set("list:david", 99);
-  f.obj.api = async (_side, path) =>
-    path.includes("/items")
-      ? Response.json([{ type: "movie", movie: { ids: { trakt: 1 } } }], {
-          headers: pageHeaders
-            ? { "x-pagination-page-count": "1", "x-pagination-item-count": "1" }
-            : {},
-        })
-      : Response.json({
-          name: "DavEmalie",
-          privacy: "private",
-          item_count: 1,
-          updated_at: "2026-09-20",
-          ids: { trakt: replaced ? 100 : 99, slug: "davemalie" },
-        });
-}
-test("complete list read verifies pagination and pinned identity", async () => {
-  const f = fixture();
-  listAPI(f);
-  assert.deepEqual(await f.obj.readOne("david"), ["movie:1"]);
-  listAPI(f, { pageHeaders: false });
-  await assert.rejects(f.obj.readOne("david"), /pagination metadata/);
-  listAPI(f, { replaced: true });
-  await assert.rejects(f.obj.readOne("david"), /replaced/);
-});
-test("enable requires a tested notification path", async () => {
-  const f = fixture();
-  await assert.rejects(f.obj.admin("/enable", {}), /notifications/);
-  assert.equal(f.data.get("enabled"), undefined);
+  await assert.rejects(f.obj.identity("david"), /identity mismatch/);
 });
 test('daily cron routes to history checking and repair',async()=>{
- let checks=0,runs=0;const pending=[];
- const env={SYNC:{getByName:()=>({historyCheck:async()=>{checks++},run:async()=>{runs++}})}};
+ let checks=0;const pending=[];
+ const env={SYNC:{getByName:()=>({historyCheck:async()=>{checks++}})}};
  await worker.scheduled({cron:'35 12 * * *'},env,{waitUntil:p=>pending.push(p)});
  await worker.scheduled({cron:'17 * * * *'},env,{waitUntil:p=>pending.push(p)});
- await Promise.all(pending);assert.equal(checks,1);assert.equal(runs,1);
+ await Promise.all(pending);assert.equal(checks,1);
 });
 test('history scan checks identities, reports issues, and deduplicates alerts',async()=>{
  const f=fixture();let identities=0,calls=0;
  f.obj.identity=async()=>{identities++};
- f.obj.api=async(side,path,data)=>{assert.equal(data,undefined);calls++;return Response.json([{id:side==='david'?1:2,type:'movie',watched_at:'1970-01-01T00:00:00Z',movie:{title:'Example',released:'2020-01-01'}}],{headers:{'x-pagination-page-count':'1','x-pagination-item-count':'1'}})};
+ f.obj.api=async(side,path,data)=>{assert.equal(data,undefined);calls++;return Response.json([{id:1,type:'movie',watched_at:'1970-01-01T00:00:00Z',movie:{title:'Example',released:'2020-01-01'}}],{headers:{'x-pagination-page-count':'1','x-pagination-item-count':'1'}})};
  await f.obj.historyCheck();await f.obj.historyCheck();
- assert.equal(identities,4);assert.equal(calls,4);assert.equal(f.emails,1);
+ assert.equal(identities,2);assert.equal(calls,2);assert.equal(f.emails,1);
  assert.equal(f.data.get('history:lastRun').counts.david.issues,1);
- assert.equal(f.data.has('state'),false);
 });
 test('failed history scan retains prior complete report',async()=>{
  const f=fixture();f.data.set('history:summary:david',{scanned:99});
@@ -200,4 +118,11 @@ test('explicit rate-limit rejection retries without repeating an accepted write'
   const r=await f.obj.api('david','/sync/history',{movies:[]},{access_token:'test'});
   assert.equal(r.status,200);assert.equal(calls,2);
  } finally {globalThis.fetch=original;}
+});
+test('token requests never send a client secret',async()=>{
+ const f=fixture(),original=globalThis.fetch;let body;
+ f.env.TRAKT_CLIENT_ID='test-client';
+ globalThis.fetch=async(_u,init)=>{body=JSON.parse(init.body);return Response.json({device_code:'d'})};
+ try {await f.obj.oauth('/oauth/device/code',{});assert.deepEqual(body,{client_id:'test-client'});}
+ finally {globalThis.fetch=original;}
 });
