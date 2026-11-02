@@ -102,7 +102,19 @@ export class DavEmalieSync extends DurableObject<Env> {
       }),
       signal: AbortSignal.timeout(20000),
     });
-    if (!r.ok) throw Error("Trakt authorization HTTP " + r.status);
+    if (!r.ok) {
+      const detail = (await r.json().catch(() => ({}))) as {
+        error?: unknown;
+        error_description?: unknown;
+      };
+      const reason = [detail.error, detail.error_description]
+        .filter((v): v is string => typeof v === "string")
+        .join(": ")
+        .slice(0, 200);
+      throw Error(
+        "Trakt authorization HTTP " + r.status + (reason ? " (" + reason + ")" : ""),
+      );
+    }
     return r.json();
   }
   private lastApiRequest = 0;

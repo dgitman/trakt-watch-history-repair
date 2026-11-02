@@ -119,6 +119,12 @@ test('explicit rate-limit rejection retries without repeating an accepted write'
   assert.equal(r.status,200);assert.equal(calls,2);
  } finally {globalThis.fetch=original;}
 });
+test('authorization errors include Trakt error reason',async()=>{
+ const f=fixture(),original=globalThis.fetch;
+ globalThis.fetch=async()=>Response.json({error:'invalid_grant',error_description:'session not found'},{status:400});
+ try {await assert.rejects(f.obj.oauth('/oauth/token',{}),/HTTP 400 \(invalid_grant: session not found\)/);}
+ finally {globalThis.fetch=original;}
+});
 test('token requests never send a client secret',async()=>{
  const f=fixture(),original=globalThis.fetch;let body;
  f.env.TRAKT_CLIENT_ID='test-client';
