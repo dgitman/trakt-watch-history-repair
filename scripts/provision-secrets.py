@@ -10,7 +10,12 @@ for name in names:
     if result.returncode:
         raise SystemExit('Could not read ' + name + ' from 1Password')
     secrets[name] = result.stdout.strip()
-result = subprocess.run(['npx', 'wrangler', 'secret', 'bulk'], input=json.dumps(secrets), text=True, capture_output=True)
+# Prefer Wrangler's 1Password shell plugin for Cloudflare authentication; fall back to the ambient login.
+env = {**os.environ, 'PATH': os.path.abspath('node_modules/.bin') + os.pathsep + os.environ.get('PATH', '')}
+for command in (['op', 'plugin', 'run', '--', 'wrangler'], ['npx', 'wrangler']):
+    result = subprocess.run(command + ['secret', 'bulk'], input=json.dumps(secrets), text=True, capture_output=True, env=env)
+    if result.returncode == 0:
+        break
 # Print only the result, never raw provider errors that might reflect inputs.
 print('Cloudflare secrets uploaded' if result.returncode == 0 else 'Cloudflare secret upload failed')
 raise SystemExit(result.returncode)
